@@ -43,8 +43,8 @@
 					{
 						"previewLimit": 50,
 						"driver": "SQLite",
-						"name": "Development Database",
-						"database": "db.sqlite3"
+						"name": "database",
+						"database": "my_database.db"
 					}
 				],
 				"files.exclude": {

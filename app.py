@@ -1,144 +1,114 @@
 from typing import List
-from typing import Optional
 
 from faker import Faker
-from sqlalchemy import ForeignKey
-from sqlalchemy import String
-from sqlalchemy import select, func
-from sqlalchemy.orm import Session
-from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.orm import Mapped
-from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import relationship
-from sqlalchemy import create_engine
+from sqlalchemy import ForeignKey, String, create_engine, select
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
     pass
 
-
 class Customer(Base):
     __tablename__ = "customer"
     id: Mapped[int] = mapped_column(primary_key=True)
-    fullname: Mapped[str]
-    email: Mapped[Optional[str]]
-    address: Mapped[Optional[str]]
-    country_code: Mapped[Optional[str]] = mapped_column(String(2))
-    credit_card: Mapped["CreditCard"] = relationship(
-        "CreditCard", back_populates="customer"
-    )
+    name: Mapped[str] = mapped_column(String(100))
+    email_address: Mapped[str]
+    address: Mapped[str]
+    country_code: Mapped[str] = mapped_column(String(2))
+    # add a 1-to-1 relationship to CreditCard
+    credit_card: Mapped["CreditCard"] = relationship("CreditCard", uselist=False,
+                                                     back_populates="customer")
+    # add a 1-to-many relationship to Order
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="customer")
-
-    def __repr__(self) -> str:
-        return f"<Customer {self.id} {self.fullname}>"
-
-
+    def __repr__(self):
+        return f"<Customer(name={self.name!r})>"
+    
 class CreditCard(Base):
     __tablename__ = "credit_card"
     id: Mapped[int] = mapped_column(primary_key=True)
-    number: Mapped[str] = mapped_column(String(19))
     customer_id: Mapped[int] = mapped_column(ForeignKey("customer.id"))
-    customer: Mapped[Customer] = relationship(Customer, back_populates="credit_card")
+    customer: Mapped[Customer] = relationship("Customer", back_populates="credit_card")
+    number: Mapped[str] = mapped_column(String(19))
 
-    def __repr__(self) -> str:
-        return f"<CreditCard {self.id} {self.number}>"
-
-
+    def __repr__(self):
+        return f"<CreditCard(number={self.number!r})>"
+    
+# Add a Product with name, price, description, and category
 class Product(Base):
     __tablename__ = "product"
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str]
+    name: Mapped[str] = mapped_column(String(100))
     price: Mapped[float]
-    description: Mapped[Optional[str]]
-    category: Mapped[str] = mapped_column(String(30))
+    description: Mapped[str]
+    category: Mapped[str] = mapped_column(String(100))
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="product")
 
-    def __repr__(self) -> str:
-        return f"<Product {self.id} {self.name}>"
-
-
+    def __repr__(self):
+        return f"<Product(name={self.name!r})>"
+    
+# Add an Order with a customer_id, product_id, and quantity
 class Order(Base):
     __tablename__ = "order"
     id: Mapped[int] = mapped_column(primary_key=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customer.id"))
-    customer: Mapped[Customer] = relationship(Customer, back_populates="orders")
+    customer: Mapped[Customer] = relationship("Customer", back_populates="orders")
     product_id: Mapped[int] = mapped_column(ForeignKey("product.id"))
-    product: Mapped[Product] = relationship(Product, back_populates="orders")
-    quantity: Mapped[Optional[int]]
+    product: Mapped[Product] = relationship("Product", back_populates="orders")
+    quantity: Mapped[int]
 
-    def __repr__(self) -> str:
-        return f"<Order {self.id} {self.customer_id} {self.product_id}>"
+    def __repr__(self):
+        return f"<Order(quantity={self.quantity!r})>"
 
-
-# Connect to SQLite db
-DATABASE_URI = "sqlite:///db.sqlite3"
-
-engine = create_engine(DATABASE_URI, echo=True)
-
-Base.metadata.drop_all(engine)
+# Set up a database connection and create tables
+engine = create_engine("sqlite:///my_database.db", echo=True)
 Base.metadata.create_all(engine)
+
+fake = Faker(["en_US", "en_GB", "en_CA", "es_MX", "de_DE", "fr_FR", "ja_JP"])
 
 with Session(engine) as session:
     # insert 10 products
     for i in range(10):
-        product = Product(
-            name=f"Product {i}",
-            price=9.99,
-            description=f"Description {i}",
-            category="category",
-        )
+        product = Product(name=f"Product {i}", price=9.99, description="ABC", category="XYZ")
         session.add(product)
-    session.commit()
-
-    # insert 10 customers
-    fake = Faker(["en_US", "es_ES", "pt_BR", "en_GB"])
+    # create 100 customers
     for i in range(100):
-        customer = Customer(
-            fullname=fake.name(),
-            email=fake.email(),
-            address=fake.address(),
-            country_code=fake.country_code(),
-        )
+        customer = Customer(name=fake.name(), email_address=fake.email(),
+                            address=fake.address(), country_code=fake.country_code())
         session.add(customer)
-        # insert a credit card for each customer
+        # create a credit card for each customer
         credit_card = CreditCard(number=fake.credit_card_number(), customer=customer)
         session.add(credit_card)
-        # insert an order of a random product using their credit card
-        # insert a random number of orders for each customer
-        for _ in range(fake.random_int(1, 5)):
-            order = Order(
-                customer=customer,
-                product=session.query(Product).order_by(Product.id.desc()).first(),
-                quantity=1,
-            )
+        # insert random amount of orders of random product IDs using their credit card
+        for _ in range(fake.random_int(min=1, max=5)):
+            order = Order(customer=customer, product_id=fake.random_int(min=1, max=10),
+                        quantity=fake.random_int(min=1, max=5))
             session.add(order)
-
+    # commit the session to the database
     session.commit()
 
-    # query all customers
+    # Query the database
+    # Get all customers
     query = select(Customer)
-    customers = session.execute(query).scalars().all()
-    print(customers)
-    # select customers from the US
+    results = session.execute(query).scalars().all()
+    print(results)
+
+    # Get all customers from the US
     query = select(Customer).where(Customer.country_code == "US")
-    customers = session.execute(query).scalars().all()
-    print(customers)
-    # select a list of countries grouped by country code
-    query = select(Customer.country_code).group_by(Customer.country_code)
-    countries = session.execute(query).scalars().all()
-    print(countries)
-    # select customer name, address, and credit card number
-    query = select(Customer.fullname, Customer.address, CreditCard.number).join(
-        Customer.credit_card
-    )
-    customers = session.execute(query).all()
-    print(customers)
-    # sellect customer id with number of orders per customer
-    query = (
-        select(Customer.id, func.count(Order.id))
-        .join(Customer.orders)
-        .group_by(Customer.id)
-        .order_by(func.count(Order.id).desc())
-    )
-    result = session.execute(query).all()
-    print(result)
+    results = session.execute(query).scalars().all()
+    print(results)
+
+    # Select a list of countries grouped by country code
+    from sqlalchemy import func
+    query = select(Customer.country_code, func.count(Customer.country_code)).group_by(Customer.country_code)
+    results = session.execute(query).all()
+    print(results)
+
+    # Select customer name with credit card number
+    query = select(Customer.name, CreditCard.number).join(CreditCard)
+    results = session.execute(query).all()
+    print(results)
+
+    # Select customer name with their number of orders
+    query = select(Customer.id, func.count(Order.id)).join(Order).group_by(Customer.id)
+    results = session.execute(query).all()
+    print(results)
