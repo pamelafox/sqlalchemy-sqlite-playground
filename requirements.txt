@@ -1,2 +1,2 @@
-SQLAlchemy==2.0.13
-faker==18.7.0
+SQLAlchemy==2.0.15
+faker==18.9.0
