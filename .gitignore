@@ -1,0 +1,5 @@
+__pycache__/
+.azure
+.env
+node_modules/
+my_database.db
