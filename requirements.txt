@@ -1,2 +1,2 @@
 SQLAlchemy==2.0.28
-faker==24.2.0
+faker==24.3.0
